@@ -1,52 +1,98 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import cv2
 import numpy as np
-import base64
 import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+import base64
 import math
+import json
+from websocket import create_connection # Biblioteca websocket-client
 
 app = Flask(__name__)
+CORS(app)
 
-mp_hands = mp.solutions.hands
-hands = mp_hands.Hands(
-    max_num_hands=1,
-    min_detection_confidence=0.7,
-    min_tracking_confidence=0.7
-)
+# --- Configuração MediaPipe ---
+base_options = python.BaseOptions(model_asset_path="hand_landmarker.task")
+options = vision.HandLandmarkerOptions(base_options=base_options, num_hands=1)
+detector = vision.HandLandmarker.create_from_options(options)
 
-@app.route("/frame", methods=["POST"])
-def receive_frame():
-    data = request.json["image"]
+# Endereço do WebSocket PHP (ajuste o IP se necessário)
+WS_SERVER_URL = "ws://192.168.0.4:8080"
 
-    # Remove cabeçalho base64
-    image_data = base64.b64decode(data.split(",")[1])
+def calcular_distancia(p1, p2):
+    return math.hypot(p1.x - p2.x, p1.y - p2.y)
 
-    # Converte para OpenCV
-    np_img = np.frombuffer(image_data, np.uint8)
-    frame = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
+def mao_esta_fechada(landmarks):
+    pulso = landmarks[0]
+    dedos_indices = [(8, 6), (12, 10), (16, 14), (20, 18)]
+    dedos_dobrados = 0
+    for ponta_idx, junta_idx in dedos_indices:
+        if calcular_distancia(landmarks[ponta_idx], pulso) < calcular_distancia(landmarks[junta_idx], pulso):
+            dedos_dobrados += 1
+    return dedos_dobrados >= 3
 
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    result = hands.process(rgb)
+def enviar_para_socket(payload):
+    try:
+        # Conecta, envia e desconecta a cada frame (simples para Flask)
+        ws = create_connection(WS_SERVER_URL, timeout=0.1)
+        ws.send(json.dumps(payload))
+        ws.close()
+    except Exception as e:
+        print(f"Erro ao conectar no Socket: {e}")
 
-    segurando = False
+@app.route('/frame', methods=['POST'])
+def process_frame():
+    try:
+        data = request.json
+        image_data = data.get('image')
 
-    if result.multi_hand_landmarks:
-        hand = result.multi_hand_landmarks[0]
-        polegar = hand.landmark[4]
-        indicador = hand.landmark[8]
+        if not image_data: return jsonify({"error": "No image"}), 400
 
-        h, w, _ = frame.shape
-        x1, y1 = int(polegar.x * w), int(polegar.y * h)
-        x2, y2 = int(indicador.x * w), int(indicador.y * h)
+        if "," in image_data: image_data = image_data.split(",")[1]
+        
+        frame = cv2.imdecode(np.frombuffer(base64.b64decode(image_data), np.uint8), cv2.IMREAD_COLOR)
 
-        distancia = math.hypot(x2 - x1, y2 - y1)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        result = detector.detect(mp_image)
+        
+        response_data = {"detectado": False}
 
-        if distancia < 40:
-            segurando = True
+        if result.hand_landmarks:
+            hand = result.hand_landmarks[0]
+            
+            # Usaremos a ponta do indicador (Index Finger Tip = 8) para coordenadas
+            # Ou o centro da palma (9) se preferir
+            ponto_controle = hand[8] 
+            
+            x = ponto_controle.x
+            y = ponto_controle.y
+            estado = "fechada" if mao_esta_fechada(hand) else "aberta"
 
-        print("Segurando:", segurando)
+            # Invertemos o X para ficar espelhado (natural para interação em tela)
+            x_invertido = 1 - x 
 
-    return jsonify({"segurando": segurando})
+            print(f"📍 X: {x_invertido:.2f} | Y: {y:.2f} | 🖐️ {estado}")
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+            # Prepara dados para o Socket PHP
+            socket_payload = {
+                "x": x_invertido,
+                "y": y,
+                "estado": estado
+            }
+            
+            # Envia para o PHP
+            enviar_para_socket(socket_payload)
+
+            response_data = {"detectado": True, "estado": estado}
+
+        return jsonify(response_data)
+
+    except Exception as e:
+        print(e)
+        return jsonify({"error": str(e)}), 500
+
+if __name__ == '__main__':
+    # Importante: host 0.0.0.0 para aceitar conexões da LAN
+    app.run(host='0.0.0.0', port=5000, debug=True)

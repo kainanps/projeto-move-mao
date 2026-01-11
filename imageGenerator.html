@@ -2,41 +2,102 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Câmera Mobile</title>
+<title>Controle por Gestos</title>
+<style>
+    body { margin: 0; overflow: hidden; background: #222; }
+    
+    /* O elemento que vamos mover */
+    #cursor {
+        position: absolute;
+        width: 50px;
+        height: 50px;
+        background-color: cyan;
+        border-radius: 50%;
+        border: 3px solid white;
+        transform: translate(-50%, -50%); /* Centraliza no ponto X,Y */
+        transition: top 0.1s, left 0.1s; /* Suaviza o movimento */
+        z-index: 100;
+        pointer-events: none;
+    }
+
+    #cursor.fechada {
+        background-color: red;
+        width: 30px;
+        height: 30px;
+    }
+
+    video, canvas {
+        position: fixed;
+        bottom: 10px;
+        right: 10px;
+        width: 200px;
+        border: 2px solid #555;
+        border-radius: 10px;
+        transform: scaleX(-1); /* Espelha o vídeo localmente */
+    }
+</style>
 </head>
 <body>
 
-<h2 id="status">Aguardando...</h2>
+<div id="cursor"></div>
+
 <video id="video" autoplay playsinline></video>
 <canvas id="canvas" style="display:none;"></canvas>
 
 <script>
+// --- Configurações ---
+const PYTHON_API = "http://192.168.0.4:5000/frame";
+const WS_SERVER  = "ws://192.168.0.4:8080";
+
+const cursor = document.getElementById("cursor");
 const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
-const status = document.getElementById("status");
 
-navigator.mediaDevices.getUserMedia({ video: true })
+// 1. Iniciar Câmera
+navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } })
   .then(stream => video.srcObject = stream);
 
+// 2. Conectar ao WebSocket (PHP) para receber coordenadas
+const ws = new WebSocket(WS_SERVER);
+
+ws.onopen = () => console.log("Conectado ao WebSocket PHP!");
+ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    
+    // Converte coordenadas normalizadas (0 a 1) para pixels da tela
+    const screenX = data.x * window.innerWidth;
+    const screenY = data.y * window.innerHeight;
+
+    // Move o cursor
+    cursor.style.left = screenX + "px";
+    cursor.style.top = screenY + "px";
+
+    // Muda o estilo visual se estiver segurando
+    if (data.estado === "fechada") {
+        cursor.classList.add("fechada");
+    } else {
+        cursor.classList.remove("fechada");
+    }
+};
+
+// 3. Loop de Envio para o Python
 setInterval(() => {
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        ctx.drawImage(video, 0, 0);
+        // Qualidade 0.5 para ser mais rápido
+        const image = canvas.toDataURL("image/jpeg", 0.5); 
 
-  ctx.drawImage(video, 0, 0);
-  const image = canvas.toDataURL("image/jpeg");
-
-  fetch("http://192.168.0.4:5000/frame", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ image })
-  })
-  .then(res => res.json())
-  .then(data => {
-    status.innerText = data.segurando ? "🖐️ Segurando" : "✋ Solto";
-  });
-
-}, 200); // envia 5 frames por segundo
+        fetch(PYTHON_API, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image })
+        }).catch(err => console.error("Erro no envio:", err));
+    }
+}, 100); // Envia 10 frames por segundo (ajuste conforme a performance da rede)
 </script>
 
 </body>
