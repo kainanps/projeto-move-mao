@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>PC - Tela Controlada</title>
+<style>
+    body {
+        margin: 0;
+        overflow: hidden;
+        background-color: #1a1a1a; /* Fundo escuro para destacar */
+        font-family: sans-serif;
+    }
+
+    #info {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        color: #555;
+        z-index: 10;
+    }
+
+    /* O objeto que vamos mover */
+    #cursor {
+        position: absolute;
+        width: 60px;
+        height: 60px;
+        background-color: #00ffcc; /* Ciano (Mão Aberta) */
+        border-radius: 50%; /* Faz virar uma bolinha */
+        box-shadow: 0 0 20px #00ffcc; /* Brilho */
+        transform: translate(-50%, -50%); /* Centraliza o ponto exato */
+        transition: all 0.1s ease-out; /* Suaviza o movimento */
+        
+        /* Centraliza inicial */
+        top: 50%;
+        left: 50%;
+    }
+
+    /* Estilo quando a mão fecha */
+    #cursor.agarrando {
+        background-color: #ff0055; /* Rosa/Vermelho (Segurando) */
+        box-shadow: 0 0 30px #ff0055;
+        width: 40px; /* Encolhe um pouco para dar efeito de aperto */
+        height: 40px;
+    }
+</style>
+</head>
+<body>
+
+    <div id="info">Aguardando conexão WebSocket...</div>
+    <div id="cursor"></div>
+
+<script>
+    // CONFIGURAÇÃO
+    const WS_URL = "ws://192.168.0.4:8080"; // Seu IP local
+
+    const cursor = document.getElementById('cursor');
+    const info = document.getElementById('info');
+
+    function connect() {
+        const ws = new WebSocket(WS_URL);
+
+        ws.onopen = () => {
+            info.innerText = "🟢 Conectado! Mova a mão no celular.";
+            info.style.color = "#0f0";
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                
+                // O Python manda X e Y entre 0.0 e 1.0
+                // Multiplicamos pelo tamanho da tela do PC
+                const x = data.x * window.innerWidth;
+                const y = data.y * window.innerHeight;
+
+                // Move o objeto
+                cursor.style.left = x + "px";
+                cursor.style.top = y + "px";
+
+                // Muda a cor se estiver 'segurando'
+                if (data.estado === "fechada") {
+                    cursor.classList.add("agarrando");
+                } else {
+                    cursor.classList.remove("agarrando");
+                }
+
+            } catch (e) {
+                console.error("Erro ao ler dados:", e);
+            }
+        };
+
+        ws.onclose = () => {
+            info.innerText = "🔴 Desconectado. Tentando reconectar...";
+            info.style.color = "red";
+            setTimeout(connect, 2000); // Tenta reconectar em 2s
+        };
+
+        ws.onerror = (err) => {
+            console.error("Erro Socket:", err);
+            ws.close();
+        };
+    }
+
+    connect();
+</script>
+
+</body>
+</html>

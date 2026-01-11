@@ -58,30 +58,7 @@ const ctx = canvas.getContext("2d");
 navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } })
   .then(stream => video.srcObject = stream);
 
-// 2. Conectar ao WebSocket (PHP) para receber coordenadas
-// const ws = new WebSocket(WS_SERVER);
-
-// ws.onopen = () => console.log("Conectado ao WebSocket PHP!");
-// ws.onmessage = (event) => {
-//     const data = JSON.parse(event.data);
-    
-//     // Converte coordenadas normalizadas (0 a 1) para pixels da tela
-//     const screenX = data.x * window.innerWidth;
-//     const screenY = data.y * window.innerHeight;
-
-//     // Move o cursor
-//     cursor.style.left = screenX + "px";
-//     cursor.style.top = screenY + "px";
-
-//     // Muda o estilo visual se estiver segurando
-//     if (data.estado === "fechada") {
-//         cursor.classList.add("fechada");
-//     } else {
-//         cursor.classList.remove("fechada");
-//     }
-// };
-
-// 3. Loop de Envio para o Python
+// 2. Loop de Envio para o Python
 setInterval(() => {
     if (video.readyState === video.HAVE_ENOUGH_DATA) {
         canvas.width = video.videoWidth;
@@ -97,7 +74,7 @@ setInterval(() => {
             body: JSON.stringify({ image })
         }).catch(err => console.error("Erro no envio:", err));
     }
-}, 2000); // Envia 10 frames por segundo (ajuste conforme a performance da rede)
+}, 100); // Envia 10 frames por segundo (ajuste conforme a performance da rede)
 </script>
 
 </body>
