@@ -59,7 +59,7 @@ navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } })
   .then(stream => video.srcObject = stream);
 
 // 2. Conectar ao WebSocket (PHP) para receber coordenadas
-const ws = new WebSocket(WS_SERVER);
+// const ws = new WebSocket(WS_SERVER);
 
 // ws.onopen = () => console.log("Conectado ao WebSocket PHP!");
 // ws.onmessage = (event) => {
