@@ -44,6 +44,8 @@ def receive_frame():
         if distancia < 40:
             segurando = True
 
+        print("Segurando:", segurando)
+
     return jsonify({"segurando": segurando})
 
 if __name__ == "__main__":
