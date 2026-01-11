@@ -2,106 +2,138 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>PC - Tela Controlada</title>
+<title>Arrastar com a Mão</title>
 <style>
     body {
         margin: 0;
         overflow: hidden;
-        background-color: #1a1a1a; /* Fundo escuro para destacar */
+        background-color: #222;
         font-family: sans-serif;
+        user-select: none; /* Impede seleção de texto ao arrastar */
     }
 
-    #info {
-        position: absolute;
-        top: 10px;
-        left: 10px;
-        color: #555;
-        z-index: 10;
-    }
-
-    /* O objeto que vamos mover */
+    /* O cursor (sua mão) */
     #cursor {
         position: absolute;
-        width: 60px;
-        height: 60px;
-        background-color: #00ffcc; /* Ciano (Mão Aberta) */
-        border-radius: 50%; /* Faz virar uma bolinha */
-        box-shadow: 0 0 20px #00ffcc; /* Brilho */
-        transform: translate(-50%, -50%); /* Centraliza o ponto exato */
-        transition: all 0.1s ease-out; /* Suaviza o movimento */
-        
-        /* Centraliza inicial */
-        top: 50%;
-        left: 50%;
+        width: 20px;
+        height: 20px;
+        background-color: cyan;
+        border-radius: 50%;
+        border: 2px solid white;
+        transform: translate(-50%, -50%);
+        pointer-events: none; /* O cursor não interfere no click */
+        z-index: 100;
+        transition: background-color 0.1s;
     }
 
-    /* Estilo quando a mão fecha */
-    #cursor.agarrando {
-        background-color: #ff0055; /* Rosa/Vermelho (Segurando) */
-        box-shadow: 0 0 30px #ff0055;
-        width: 40px; /* Encolhe um pouco para dar efeito de aperto */
-        height: 40px;
+    #cursor.fechada {
+        background-color: red;
+        width: 15px; height: 15px;
+    }
+
+    /* O Objeto Arrastável */
+    #caixa {
+        position: absolute;
+        width: 100px;
+        height: 100px;
+        background-color: #ffcc00;
+        top: 50%; left: 50%; /* Começa no meio */
+        transform: translate(-50%, -50%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        border-radius: 10px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+    }
+    
+    #caixa.arrastando {
+        background-color: #ff9900;
+        box-shadow: 0 10px 25px rgba(255, 153, 0, 0.6);
+        scale: 1.1;
     }
 </style>
 </head>
 <body>
 
-    <div id="info">Aguardando conexão WebSocket...</div>
+    <div style="color:white; padding:10px">Conecte o celular e use na horizontal</div>
+    
+    <div id="caixa">ME ARRASTE</div>
+
     <div id="cursor"></div>
 
 <script>
-    // CONFIGURAÇÃO
-    const WS_URL = "ws://192.168.0.4:8080"; // Seu IP local
+    const WS_URL = "ws://192.168.0.4:8080"; // IP DO PC
 
     const cursor = document.getElementById('cursor');
-    const info = document.getElementById('info');
+    const caixa = document.getElementById('caixa');
 
-    function connect() {
-        const ws = new WebSocket(WS_URL);
+    // Variáveis de estado
+    let maoX = 0, maoY = 0;
+    let isSegurando = false; // Se a mão está fechada
+    let isArrastando = false; // Se está carregando a caixa
+    
+    // Offset para pegar a caixa pelo ponto certo e não pular para o centro
+    let offsetX = 0, offsetY = 0;
 
-        ws.onopen = () => {
-            info.innerText = "🟢 Conectado! Mova a mão no celular.";
-            info.style.color = "#0f0";
-        };
+    // Posição da caixa
+    let caixaX = window.innerWidth / 2;
+    let caixaY = window.innerHeight / 2;
 
-        ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                
-                // O Python manda X e Y entre 0.0 e 1.0
-                // Multiplicamos pelo tamanho da tela do PC
-                const x = data.x * window.innerWidth;
-                const y = data.y * window.innerHeight;
+    const ws = new WebSocket(WS_URL);
 
-                // Move o objeto
-                cursor.style.left = x + "px";
-                cursor.style.top = y + "px";
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
 
-                // Muda a cor se estiver 'segurando'
-                if (data.estado === "fechada") {
-                    cursor.classList.add("agarrando");
-                } else {
-                    cursor.classList.remove("agarrando");
+        // Atualiza posição do cursor (Mão)
+        maoX = data.x * window.innerWidth;
+        maoY = data.y * window.innerHeight;
+        
+        isSegurando = (data.estado === "fechada");
+
+        atualizarTela();
+    };
+
+    function atualizarTela() {
+        // 1. Move o cursor visual
+        cursor.style.left = maoX + "px";
+        cursor.style.top = maoY + "px";
+
+        if (isSegurando) {
+            cursor.classList.add("fechada");
+            
+            // Lógica de pegar a caixa
+            if (!isArrastando) {
+                // Checa colisão: A mão está em cima da caixa?
+                const rect = caixa.getBoundingClientRect();
+                if (maoX > rect.left && maoX < rect.right && 
+                    maoY > rect.top && maoY < rect.bottom) {
+                    
+                    isArrastando = true;
+                    // Calcula a diferença para não "teleportar" a caixa pro centro da mão
+                    offsetX = maoX - caixaX;
+                    offsetY = maoY - caixaY;
+                    caixa.classList.add("arrastando");
                 }
-
-            } catch (e) {
-                console.error("Erro ao ler dados:", e);
             }
-        };
+        } else {
+            cursor.classList.remove("fechada");
+            // Solta a caixa
+            isArrastando = false;
+            caixa.classList.remove("arrastando");
+        }
 
-        ws.onclose = () => {
-            info.innerText = "🔴 Desconectado. Tentando reconectar...";
-            info.style.color = "red";
-            setTimeout(connect, 2000); // Tenta reconectar em 2s
-        };
-
-        ws.onerror = (err) => {
-            console.error("Erro Socket:", err);
-            ws.close();
-        };
+        // 2. Se estiver arrastando, move a caixa junto com a mão
+        if (isArrastando) {
+            caixaX = maoX - offsetX;
+            caixaY = maoY - offsetY;
+            
+            caixa.style.left = caixaX + "px";
+            caixa.style.top = caixaY + "px";
+            // Remove o transform translate(-50%) pq agora estamos controlando left/top absoluto
+            caixa.style.transform = "none"; 
+        }
     }
-
-    connect();
 </script>
 
 </body>

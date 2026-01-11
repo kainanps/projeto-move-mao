@@ -2,80 +2,57 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Controle por Gestos</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle Horizontal</title>
 <style>
-    body { margin: 0; overflow: hidden; background: #222; }
-    
-    /* O elemento que vamos mover */
-    #cursor {
-        position: absolute;
-        width: 50px;
-        height: 50px;
-        background-color: cyan;
-        border-radius: 50%;
-        border: 3px solid white;
-        transform: translate(-50%, -50%); /* Centraliza no ponto X,Y */
-        transition: top 0.1s, left 0.1s; /* Suaviza o movimento */
-        z-index: 100;
-        pointer-events: none;
-    }
-
-    #cursor.fechada {
-        background-color: red;
-        width: 30px;
-        height: 30px;
-    }
-
-    video, canvas {
-        position: fixed;
-        bottom: 10px;
-        right: 10px;
-        width: 200px;
-        border: 2px solid #555;
-        border-radius: 10px;
-        transform: scaleX(-1); /* Espelha o vídeo localmente */
-    }
+    body { background: black; margin: 0; display: flex; align-items: center; justify-content: center; height: 100vh; }
+    /* Vídeo ocupa tela toda */
+    video { width: 100%; height: 100%; object-fit: cover; } 
 </style>
 </head>
 <body>
-
-<div id="cursor"></div>
 
 <video id="video" autoplay playsinline></video>
 <canvas id="canvas" style="display:none;"></canvas>
 
 <script>
-// --- Configurações ---
-const PYTHON_API = "http://192.168.0.4:5000/frame";
-const WS_SERVER  = "ws://192.168.0.4:8080";
+    // IMPORTANTE: Use o IP do seu PC
+    const PYTHON_API = "http://192.168.0.4:5000/frame"; 
 
-const cursor = document.getElementById("cursor");
-const video = document.getElementById("video");
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
 
-// 1. Iniciar Câmera
-navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } })
-  .then(stream => video.srcObject = stream);
+    // Configuração para PAISAGEM (Width maior que Height)
+    const constraints = { 
+        video: { 
+            facingMode: 'user',
+            width: { ideal: 640 },  // Maior largura
+            height: { ideal: 360 }  // Menor altura
+        } 
+    };
 
-// 2. Loop de Envio para o Python
-setInterval(() => {
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        
-        ctx.drawImage(video, 0, 0);
-        // Qualidade 0.5 para ser mais rápido
-        const image = canvas.toDataURL("image/jpeg", 0.5); 
+    navigator.mediaDevices.getUserMedia(constraints)
+        .then(stream => video.srcObject = stream)
+        .catch(err => alert("Erro: " + err));
 
-        fetch(PYTHON_API, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image })
-        }).catch(err => console.error("Erro no envio:", err));
-    }
-}, 40); // Envia 10 frames por segundo (ajuste conforme a performance da rede)
+    setInterval(() => {
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // Qualidade 0.4 para ficar bem leve e rápido
+            const image = canvas.toDataURL("image/jpeg", 0.4);
+
+            fetch(PYTHON_API, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ image: image })
+            }).catch(e => {}); // Ignora erros de rede para não travar
+        }
+    }, 33); // 33ms = 30 FPS
 </script>
-
 </body>
 </html>
