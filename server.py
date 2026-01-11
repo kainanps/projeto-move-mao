@@ -44,6 +44,7 @@ def enviar_para_socket(payload):
 
 @app.route('/frame', methods=['POST'])
 def process_frame():
+    print("📨 Request recebido!") # <- Aqui
     try:
         data = request.json
         image_data = data.get('image')

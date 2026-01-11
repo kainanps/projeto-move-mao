@@ -61,25 +61,25 @@ navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } })
 // 2. Conectar ao WebSocket (PHP) para receber coordenadas
 const ws = new WebSocket(WS_SERVER);
 
-ws.onopen = () => console.log("Conectado ao WebSocket PHP!");
-ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
+// ws.onopen = () => console.log("Conectado ao WebSocket PHP!");
+// ws.onmessage = (event) => {
+//     const data = JSON.parse(event.data);
     
-    // Converte coordenadas normalizadas (0 a 1) para pixels da tela
-    const screenX = data.x * window.innerWidth;
-    const screenY = data.y * window.innerHeight;
+//     // Converte coordenadas normalizadas (0 a 1) para pixels da tela
+//     const screenX = data.x * window.innerWidth;
+//     const screenY = data.y * window.innerHeight;
 
-    // Move o cursor
-    cursor.style.left = screenX + "px";
-    cursor.style.top = screenY + "px";
+//     // Move o cursor
+//     cursor.style.left = screenX + "px";
+//     cursor.style.top = screenY + "px";
 
-    // Muda o estilo visual se estiver segurando
-    if (data.estado === "fechada") {
-        cursor.classList.add("fechada");
-    } else {
-        cursor.classList.remove("fechada");
-    }
-};
+//     // Muda o estilo visual se estiver segurando
+//     if (data.estado === "fechada") {
+//         cursor.classList.add("fechada");
+//     } else {
+//         cursor.classList.remove("fechada");
+//     }
+// };
 
 // 3. Loop de Envio para o Python
 setInterval(() => {
